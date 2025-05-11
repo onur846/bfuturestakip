@@ -9,11 +9,12 @@ export async function fetchInitialPrices() {
   prices.forEach((p) => {
     initialPrices[p.symbol] = parseFloat(p.price);
   });
+  console.log("Başlangıç fiyatları alındı:", initialPrices);
 }
 
 export async function getPriceMovements() {
   if (Object.keys(initialPrices).length === 0) {
-    await fetchInitialPrices(); // eğer ilk fiyatlar yoksa başlat
+    await fetchInitialPrices();
     return { gainers: [], losers: [] };
   }
 
@@ -36,9 +37,13 @@ export async function getPriceMovements() {
       time: new Date().toUTCString(),
     };
 
+    // %3 eşik
     if (change >= 3) gainers.push(entry);
     else if (change <= -3) losers.push(entry);
   }
+
+  console.log("Gainers:", gainers);
+  console.log("Losers:", losers);
 
   return { gainers, losers };
 }
