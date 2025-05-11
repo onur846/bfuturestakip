@@ -1,40 +1,43 @@
 import axios from "axios";
 
-export async function getVolatileCoins() {
-  const exchangeInfo = await axios.get("https://fapi.binance.com/fapi/v1/exchangeInfo");
-  const usdtSymbols = exchangeInfo.data.symbols
-    .filter((s) => s.symbol.endsWith("USDT") && s.contractType === "PERPETUAL")
-    .map((s) => s.symbol);
+let initialPrices = {};
+
+export async function fetchInitialPrices() {
+  const res = await axios.get("https://fapi.binance.com/fapi/v1/ticker/price");
+  const prices = res.data.filter((item) => item.symbol.endsWith("USDT"));
+  initialPrices = {};
+  prices.forEach((p) => {
+    initialPrices[p.symbol] = parseFloat(p.price);
+  });
+}
+
+export async function getPriceMovements() {
+  if (Object.keys(initialPrices).length === 0) {
+    await fetchInitialPrices(); // eğer ilk fiyatlar yoksa başlat
+    return { gainers: [], losers: [] };
+  }
+
+  const res = await axios.get("https://fapi.binance.com/fapi/v1/ticker/price");
+  const prices = res.data.filter((item) => item.symbol.endsWith("USDT"));
 
   const gainers = [];
   const losers = [];
 
-  for (const symbol of usdtSymbols) {
-    try {
-      const res = await axios.get(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=15m&limit=2`);
-      
-      const open1 = parseFloat(res.data[0][1]);   // ilk mumun açılış fiyatı
-      const close2 = parseFloat(res.data[1][4]);  // ikinci mumun kapanış fiyatı
+  for (const p of prices) {
+    const current = parseFloat(p.price);
+    const old = initialPrices[p.symbol];
+    if (!old || old === 0) continue;
 
-      if (open1 === 0) continue; // 0'a bölme hatasını engelle
+    const change = ((current - old) / old) * 100;
 
-      const change = ((close2 - open1) / open1) * 100;
+    const entry = {
+      symbol: p.symbol,
+      change: change.toFixed(2),
+      time: new Date().toUTCString(),
+    };
 
-      const entry = {
-        symbol,
-        change: change.toFixed(2),
-        time: new Date(res.data[1][0]).toUTCString(),
-      };
-
-      if (change >= 3) {
-        gainers.push(entry);
-      } else if (change <= -3) {
-        losers.push(entry);
-      }
-
-    } catch (err) {
-      console.error(`Hata (${symbol}):`, err.message);
-    }
+    if (change >= 3) gainers.push(entry);
+    else if (change <= -3) losers.push(entry);
   }
 
   return { gainers, losers };
